@@ -1,0 +1,171 @@
+import React, { useState } from "react";
+import { motion } from "framer-motion";
+import { Button } from "@/components/ui/button";
+
+const symbols = [
+  "🀄", "🀇", "🀈", "🀉", "🀊", "🀋", "🀌", "🀍", "🀎", "🀏", "🌟", "⭕",
+];
+
+const getRandomSymbol = () => symbols[Math.floor(Math.random() * symbols.length)];
+
+const generateReels = () => {
+  return Array.from({ length: 5 }, () =>
+    Array.from({ length: 4 }, () => getRandomSymbol())
+  );
+};
+
+const cloneReels = (reels) => reels.map(col => [...col]);
+
+const playAudio = () => {
+  const audio = new Audio("/mnt/data/mahjong ways - cover piano (320).mp3");
+  audio.volume = 0.6;
+  audio.play();
+};
+
+export default function MahjongSlot() {
+  const [reels, setReels] = useState(generateReels());
+  const [spinning, setSpinning] = useState(false);
+  const [winCount, setWinCount] = useState(0);
+  const [scatterCount, setScatterCount] = useState(0);
+  const [credit, setCredit] = useState(1000);
+  const [freeSpins, setFreeSpins] = useState(0);
+
+  const findWinningCombinations = (grid) => {
+    const winningPositions = [];
+    for (let row = 0; row < 4; row++) {
+      for (let col = 0; col < 3; col++) {
+        const sym1 = grid[col][row];
+        const sym2 = grid[col + 1][row];
+        const sym3 = grid[col + 2][row];
+        if (sym1 === sym2 && sym2 === sym3) {
+          winningPositions.push([col, row], [col + 1, row], [col + 2, row]);
+        }
+      }
+    }
+    return winningPositions;
+  };
+
+  const applyCascade = (grid, wins) => {
+    const newGrid = cloneReels(grid);
+    for (const [col, row] of wins) {
+      for (let r = row; r > 0; r--) {
+        newGrid[col][r] = newGrid[col][r - 1];
+      }
+      newGrid[col][0] = getRandomSymbol();
+    }
+    return newGrid;
+  };
+
+  const countScatterSymbols = (grid) => {
+    let count = 0;
+    for (let col = 0; col < grid.length; col++) {
+      for (let row = 0; row < grid[col].length; row++) {
+        if (grid[col][row] === "⭕") count++;
+      }
+    }
+    return count;
+  };
+
+  const handleSpin = async () => {
+    if (spinning) return;
+
+    setSpinning(true);
+    setWinCount(0);
+    setScatterCount(0);
+
+    if (freeSpins === 0) {
+      setCredit(prev => prev - 50);
+    }
+
+    playAudio(); // efek spin
+
+    let currentReels = generateReels();
+    setReels(currentReels);
+
+    await new Promise((res) => setTimeout(res, 1000));
+
+    let cascadeCount = 0;
+    let totalWin = 0;
+    while (true) {
+      const wins = findWinningCombinations(currentReels);
+      if (wins.length === 0) break;
+
+      cascadeCount++;
+      totalWin += 50 * cascadeCount;
+
+      playAudio(); // efek menang cascade
+
+      const uniqueWins = Array.from(new Set(wins.map(([c, r]) => `${c},${r}`)))
+        .map(pos => pos.split(',').map(Number));
+
+      await new Promise((res) => setTimeout(res, 500));
+
+      currentReels = applyCascade(currentReels, uniqueWins);
+      setReels(cloneReels(currentReels));
+    }
+
+    const scatter = countScatterSymbols(currentReels);
+    if (scatter >= 3) {
+      playAudio(); // efek free spin
+      setFreeSpins(prev => prev + 10);
+    }
+
+    setScatterCount(scatter);
+    setWinCount(cascadeCount);
+    setCredit(prev => prev + totalWin);
+    if (freeSpins > 0) setFreeSpins(prev => prev - 1);
+
+    setSpinning(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-yellow-100 to-red-100 flex flex-col items-center justify-center p-4">
+      <h1 className="text-4xl font-bold mb-2 text-red-600">Mahjong Ways 2 - Cascade Demo</h1>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+        <div className="bg-white rounded-xl p-4 shadow-lg">
+          <p className="text-lg font-medium text-gray-600">Credit</p>
+          <p className="text-2xl font-bold text-blue-600">{credit}</p>
+        </div>
+        <div className="bg-white rounded-xl p-4 shadow-lg">
+          <p className="text-lg font-medium text-gray-600">Free Spins</p>
+          <p className="text-2xl font-bold text-purple-600">{freeSpins}</p>
+        </div>
+        <div className="bg-white rounded-xl p-4 shadow-lg">
+          <p className="text-lg font-medium text-gray-600">Scatter Diperoleh</p>
+          <p className="text-2xl font-bold text-red-500">{scatterCount}</p>
+        </div>
+        <div className="bg-white rounded-xl p-4 shadow-lg">
+          <p className="text-lg font-medium text-gray-600">Jumlah Menang</p>
+          <p className="text-2xl font-bold text-green-600">{winCount}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-5 gap-2 bg-white rounded-2xl p-4 shadow-2xl">
+        {reels.map((col, colIndex) => (
+          <div key={colIndex} className="flex flex-col gap-2">
+            {col.map((symbol, rowIndex) => (
+              <motion.div
+                key={rowIndex}
+                className={`w-16 h-16 flex items-center justify-center bg-yellow-50 rounded-xl text-2xl shadow-md ${symbol === "⭕" ? "bg-red-100 animate-pulse" : ""}`}
+                initial={{ opacity: 0, scale: 0 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3 }}
+              >
+                {symbol}
+              </motion.div>
+            ))}
+          </div>
+        ))}
+      </div>
+
+      <Button
+        className="mt-6 bg-red-500 text-white text-xl px-8 py-3 rounded-xl hover:bg-red-600 transition"
+        onClick={handleSpin}
+        disabled={spinning || (freeSpins === 0 && credit < 50)}
+      >
+        {spinning ? "Spinning..." : freeSpins > 0 ? `Free Spin (${freeSpins})` : "SPIN (50)"}
+      </Button>
+    </div>
+  );
+}
